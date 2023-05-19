@@ -12,6 +12,7 @@ WIN_WIDTH = 500
 WIN_HEIGHT = 800
 
 GEN = -1
+GAME_STATE = "start menu"
 
 # obrazky
 BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "bird1.png"))),pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "bird2.png"))),pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "bird3.png")))]
@@ -183,7 +184,7 @@ class Base:
         win.blit(self.IMG, (self.x2, self.y))     
 
 # funkce pro vykresleni okna
-def draw_window(win, birds, pipes, base, score, gen):
+def draw_game_window(win, birds, pipes, base, score, gen):
     # vkresleni backgroundu
     win.blit(BG_IMG, (0,0))
     
@@ -209,10 +210,23 @@ def draw_window(win, birds, pipes, base, score, gen):
     pygame.display.update()    
 
 
+def draw_start_menu(win):
+    win.blit(BG_IMG, (0,0))
+    
+    start_button = STAT_FONT.render("START", True, (255,255,255))
+    win.blit(start_button, (WIN_WIDTH/2 - start_button.get_width()/2, WIN_HEIGHT/2 - 20))
+    
+    tool_tip = STAT_FONT.render("For Start Press Space", True, (255,255,255))
+    win.blit(tool_tip, (WIN_WIDTH/2 - tool_tip.get_width()/2, WIN_HEIGHT/2 + 30))
+    
+    pygame.display.update()
+    
+    
 # hlavni funkce 
 def main(genomes, config):
     # promenne
     global GEN
+    global GAME_STATE
     GEN += 1
     nets = []
     ge = []
@@ -255,90 +269,97 @@ def main(genomes, config):
                 pygame.quit()
                 quit()
             
-        # pipe index
-        pipe_ind = 0
-        
-        # pokud pocet ptaku je vic nez nula
-        if len(birds) > 0:
+        if GAME_STATE == "start menu":
+            draw_start_menu(win)
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_SPACE]:
+                GAME_STATE =  "game"             
             
-            # pokud pocet pipe je vic nez 1 AND birdova x souradnice je dal nez pipe (pipe se nachazi za ptakem)
-            if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
-                pipe_ind = 1
-        
-        # pokud ptaku je 0: break
-        else:
-            run = False
-            break
-        
-        # pro pocet ptaku, ptaku v listu birds        
-        for x, bird in enumerate(birds):
-            bird.move()
-            ge[x].fitness += 0.1
+        if GAME_STATE == "game":      
+            # pipe index
+            pipe_ind = 0
             
-            # vraci hodntotu mezi -1 a 1 (vyska ptaka, absolutni hodnota(vyska ptaka - vyska pipe[pipe_index]), absolutni hodnota(ptaka vyska - vrsek spodni pipe[pipe_index]))
-            output = nets[x].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+            # pokud pocet ptaku je vic nez nula
+            if len(birds) > 0:
+                
+                # pokud pocet pipe je vic nez 1 AND birdova x souradnice je dal nez pipe (pipe se nachazi za ptakem)
+                if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
+                    pipe_ind = 1
             
-            # kdyz je 0.5
-            if output[0] > -0.99:
-                bird.jump()
-        
-        add_pipe = False
-        # list pro remove
-        rem = []
-        
-        # kazda pipe
-        for pipe in pipes:
-            # pocet ptaku v listu, ptaci
+            # pokud ptaku je 0: break
+            else:
+                run = False
+                break
+            
+            # pro pocet ptaku, ptaku v listu birds        
             for x, bird in enumerate(birds):
-                # pokud maji kolizi s pipe 
-                if pipe.collide(bird):
-                    # odstraneni ptaka
-                    ge[x].fitness -= 1
+                bird.move()
+                ge[x].fitness += 0.1
+                
+                # vraci hodntotu mezi -1 a 1 (vyska ptaka, absolutni hodnota(vyska ptaka - vyska pipe[pipe_index]), absolutni hodnota(ptaka vyska - vrsek spodni pipe[pipe_index]))
+                output = nets[x].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+                
+                # kdyz je 0.5
+                if output[0] > 0.5:
+                    bird.jump()
+            
+            add_pipe = False
+            # list pro remove
+            rem = []
+            
+            # kazda pipe
+            for pipe in pipes:
+                # pocet ptaku v listu, ptaci
+                for x, bird in enumerate(birds):
+                    # pokud maji kolizi s pipe 
+                    if pipe.collide(bird):
+                        # odstraneni ptaka
+                        ge[x].fitness -= 1
+                        birds.pop(x)
+                        nets.pop(x)
+                        ge.pop(x)   
+                    
+                    # pokud pipe.paseed = False a ptak je za pipe
+                    if not pipe.passed and pipe.x < bird.x:
+                        # nastavit pipe.passed na true a prida se pipe
+                        pipe.passed = True
+                        add_pipe = True 
+                
+                # pokud je pipe offscreen tak se smaze
+                if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                    rem.append(pipe)
+                
+                # pipe se pohne
+                pipe.move()
+            
+            # pokud add_pipe = True
+            if add_pipe:
+                # score se zvedno o 1
+                score += 1
+                
+                # prida se fitness
+                for g in ge:
+                    g.fitness += 5\
+                
+                # zalozi se nova pipe
+                pipes.append(Pipe(600))
+            
+            # odstraneni pipe   
+            for r in rem:
+                pipes.remove(r)
+            
+            # pokud ptak narazi do zeme nebo vyleti ze screenu 
+            for x, bird in enumerate(birds):
+                if bird.y + bird.img.get_height() >= 730 or bird.y < 0:
                     birds.pop(x)
                     nets.pop(x)
-                    ge.pop(x)   
-                
-                # pokud pipe.paseed = False a ptak je za pipe
-                if not pipe.passed and pipe.x < bird.x:
-                    # nastavit pipe.passed na true a prida se pipe
-                    pipe.passed = True
-                    add_pipe = True 
+                    ge.pop(x)
             
-            # pokud je pipe offscreen tak se smaze
-            if pipe.x + pipe.PIPE_TOP.get_width() < 0:
-                rem.append(pipe)
+            # pohyb groundu  
+            base.move()
             
-            # pipe se pohne
-            pipe.move()
-        
-        # pokud add_pipe = True
-        if add_pipe:
-            # score se zvedno o 1
-            score += 1
-            
-            # prida se fitness
-            for g in ge:
-                g.fitness += 5\
-            
-            # zalozi se nova pipe
-            pipes.append(Pipe(600))
-        
-        # odstraneni pipe   
-        for r in rem:
-            pipes.remove(r)
-        
-        # pokud ptak narazi do zeme nebo vyleti ze screenu 
-        for x, bird in enumerate(birds):
-            if bird.y + bird.img.get_height() >= 730 or bird.y < 0:
-                birds.pop(x)
-                nets.pop(x)
-                ge.pop(x)
-         
-        # pohyb groundu  
-        base.move()
-        
-        # vykresleni okna
-        draw_window(win, birds, pipes, base, score, GEN)
+            # vykresleni okna
+            draw_game_window(win, birds, pipes, base, score, GEN)
         
 
 # funkce run
